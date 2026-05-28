@@ -1,0 +1,21 @@
+services:
+
+  mariadb:
+    image: mariadb:11
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: dogsitter
+      MYSQL_USER: dogsitter
+      MYSQL_PASSWORD: secret
+    ports:
+      - "3306:3306"       # localhost:3306 → Container
+    volumes:
+      - mariadb_data:/var/lib/mysql   # Daten bleiben erhalten auch nach docker-compose down
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"       # localhost:6379 → Container
+
+volumes:
+  mariadb_data:           # Docker verwaltet dieses Volume intern

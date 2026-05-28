@@ -1,0 +1,97 @@
+name: Deploy Backend
+
+# Läuft bei jedem Push auf main, aber nur wenn backend-Dateien geändert wurden
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+
+jobs:
+  test:
+    name: Tests ausführen
+    runs-on: ubuntu-latest
+
+    services:
+      # GitHub Actions startet eine echte MariaDB für die Tests
+      mariadb:
+        image: mariadb:11
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: dogsitter_test
+          MYSQL_USER: dogsitter
+          MYSQL_PASSWORD: secret
+        ports:
+          - 3306:3306
+        options: --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: PHP einrichten
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: mbstring, pdo, pdo_mysql
+
+      - name: Composer-Abhängigkeiten installieren
+        working-directory: backend
+        run: composer install --no-interaction --prefer-dist
+
+      - name: .env für Tests erstellen
+        working-directory: backend
+        run: |
+          cp .env.example .env.testing
+          sed -i 's/DB_DATABASE=.*/DB_DATABASE=dogsitter_test/' .env.testing
+          sed -i 's/DB_USERNAME=.*/DB_USERNAME=dogsitter/' .env.testing
+          sed -i 's/DB_PASSWORD=.*/DB_PASSWORD=secret/' .env.testing
+          php artisan key:generate --env=testing
+
+      - name: Datenbank migrieren (Testdatenbank)
+        working-directory: backend
+        run: php artisan migrate --env=testing --force
+
+      - name: Tests ausführen
+        working-directory: backend
+        run: php artisan test
+
+  deploy:
+    name: Auf all-inkl deployen
+    runs-on: ubuntu-latest
+    needs: test  # Nur deployen wenn alle Tests grün sind!
+
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: PHP einrichten
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+
+      - name: Composer-Abhängigkeiten installieren (ohne Dev-Pakete)
+        working-directory: backend
+        run: composer install --no-interaction --prefer-dist --no-dev --optimize-autoloader
+
+      - name: Dateien via SSH auf Server übertragen
+        uses: easingthemes/ssh-deploy@main
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.ALLINKL_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.ALLINKL_HOST }}
+          REMOTE_USER: ${{ secrets.ALLINKL_USER }}
+          SOURCE: backend/
+          TARGET: ${{ secrets.ALLINKL_PATH }}
+          EXCLUDE: ".env, .git, node_modules/, tests/"
+
+      - name: Migrationen auf Server ausführen
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.ALLINKL_HOST }}
+          username: ${{ secrets.ALLINKL_USER }}
+          key: ${{ secrets.ALLINKL_SSH_KEY }}
+          script: |
+            cd ${{ secrets.ALLINKL_PATH }}
+            php artisan migrate --force
+            php artisan config:cache
+            php artisan route:cache
