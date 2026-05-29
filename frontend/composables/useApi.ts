@@ -8,9 +8,15 @@ export const useApi = () => {
 
   const apiFetch = $fetch.create({
     baseURL: config.public.apiBase,
-    headers: computed(() =>
-      token.value ? { Authorization: `Bearer ${token.value}` } : {}
-    ),
+    onRequest({ options }) {
+      // Token bei jedem Request frisch auslesen und als Header setzen
+      if (token.value) {
+        options.headers = {
+          ...options.headers,
+          Authorization: `Bearer ${token.value}`,
+        }
+      }
+    },
     onResponseError({ response }) {
       if (response.status === 401) {
         token.value = null

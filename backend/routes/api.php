@@ -23,6 +23,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
 
     // Sitter-Profil verwalten
+    Route::get('/sitter/profile', [SitterController::class, 'myProfile']);
     Route::post('/sitter/profile', [SitterController::class, 'store']);
     Route::put('/sitter/profile', [SitterController::class, 'update']);
 

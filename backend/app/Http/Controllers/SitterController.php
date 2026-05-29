@@ -9,6 +9,17 @@ use Illuminate\Http\Request;
 
 class SitterController extends Controller
 {
+    public function myProfile(Request $request): JsonResponse
+    {
+        $profile = $request->user()->sitterProfile()->first();
+
+        if (!$profile) {
+            return response()->json(null, 404);
+        }
+
+        return response()->json($profile);
+    }
+
     public function show(User $sitter): JsonResponse
     {
         $profile = $sitter->sitterProfile()->firstOrFail();
